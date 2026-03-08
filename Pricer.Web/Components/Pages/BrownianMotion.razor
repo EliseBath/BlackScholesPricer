@@ -1,0 +1,139 @@
+﻿@page "/brownian-motion"
+@using MudBlazor
+@using MudBlazor.Charts
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-6">
+
+<MudPaper Class="pa-6">
+
+<MudText Typo="Typo.h5">Brownian Motion Simulation</MudText>
+
+<MudChart ChartType="ChartType.Timeseries"
+          ChartSeries="@series"
+          Width="100%"
+          Height="350px"
+          ChartOptions="_options" />
+
+<MudDivider Class="my-4"/>
+
+<MudText Typo="Typo.subtitle1">Number of Time Steps</MudText>
+
+<MudSlider Min="10"
+            Max="500"
+            Step="10"
+            Immediate="true"
+            @bind-Value="steps" />
+
+<MudText Typo="Typo.body2">
+Steps: @steps
+</MudText>
+
+<MudDivider Class="my-4" />
+
+<MudText Typo="Typo.subtitle1">Diffusive Scaling (α)</MudText>
+
+<MudSlider Min="0.2"
+            Max="2.0"
+            Step="0.01"
+            Immediate="true"
+            @bind-Value="alpha" />
+
+<MudText Typo="Typo.body2">
+Alpha: @alpha
+</MudText>
+
+<MudText Typo="Typo.caption">
+    Alpha &lt; 1.0 → explosion | alpha = 1.0 → Brownian motion | alpha &gt; 1.0 → freezing
+</MudText>
+
+</MudPaper>
+
+</MudContainer>
+
+@code {
+    private int _steps = 100; 
+    private int steps 
+    { 
+        get => _steps; 
+        set 
+        { 
+            if (_steps == value) return; 
+            _steps = value; 
+            GeneratePath(); 
+        } 
+    }
+
+    private double _alpha = 0.5;
+    private double alpha
+    {
+        get => _alpha;
+        set
+        {
+            if (Math.Abs(_alpha - value) < 1e-12) return;
+            _alpha = value;
+            GeneratePath();
+        }
+    }
+
+    private ChartSeries<double> brownianSeries = new();
+    private List<ChartSeries<double>> series = new();
+
+    private readonly Random random = new();
+
+    private TimeSeriesChartOptions _options = new()
+    {
+        YAxisLines = false,
+        XAxisLines = false,
+        ShowDataMarkers = false,
+        LineStrokeWidth = 2,
+        XAxisTitle = "Time",
+        YAxisTitle = "Value"
+    };
+
+    protected override void OnInitialized()
+    {
+        GeneratePath();
+    }
+
+    private void GeneratePath(int _ = 0)
+    {
+        var now = DateTime.Now;
+
+        double x = 0.0;
+        double dt = 1.0 / steps;
+
+        var data = new List<TimeValue<double>>();
+
+        for (int i = 0; i < steps; i++)
+        {
+            double z = NextGaussian();
+
+            x += 10*Math.Pow(dt, alpha / 2.0) * z; //a=10
+
+            data.Add(new TimeValue<double>(
+                now.AddSeconds(i),
+                x
+            ));
+        }
+
+        brownianSeries = new ChartSeries<double>
+        {
+            Name = "Brownian Motion",
+            Data = data.ToArray(),
+            Visible = true
+        };
+
+        series = new List<ChartSeries<double>> { brownianSeries };
+
+        StateHasChanged();
+    }
+
+    private double NextGaussian()
+    {
+        double u1 = 1.0 - random.NextDouble();
+        double u2 = 1.0 - random.NextDouble();
+
+        return Math.Sqrt(-2.0 * Math.Log(u1)) *
+               Math.Cos(2.0 * Math.PI * u2);
+    }
+}
