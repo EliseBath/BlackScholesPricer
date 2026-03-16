@@ -1,6 +1,7 @@
 ﻿@page "/brownian-motion"
 @using MudBlazor
 @using MudBlazor.Charts
+@using Pricer.Numerics
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-6">
 
@@ -46,6 +47,18 @@ Alpha: @alpha
     Alpha &lt; 1.0 → explosion | alpha = 1.0 → Brownian motion | alpha &gt; 1.0 → freezing
 </MudText>
 
+<MudText Typo="Typo.subtitle1">Correlation</MudText>
+
+<MudSlider Min="-1"
+            Max="1"
+            Step="0.05"
+            Immediate="true"
+            @bind-Value="correlation" />
+
+<MudText Typo="Typo.body2">
+    Correlation: @correlation
+</MudText>
+
 </MudPaper>
 
 </MudContainer>
@@ -75,6 +88,18 @@ Alpha: @alpha
         }
     }
 
+    private double _correlation = 0.5;
+    private double correlation
+    {
+        get => _correlation;
+        set
+        {
+            if (Math.Abs(_correlation - value) < 1e-12) return;
+            _correlation = value;
+            GeneratePath();
+        }
+    }
+
     private ChartSeries<double> brownianSeries = new();
     private List<ChartSeries<double>> series = new();
 
@@ -99,31 +124,32 @@ Alpha: @alpha
     {
         var now = DateTime.Now;
 
-        double x = 0.0;
-        double dt = 1.0 / steps;
+        var (W1, W3) = CorrelatedBrownianGenerator.Generate(steps, correlation, alpha);
 
-        var data = new List<TimeValue<double>>();
+        var data1 = new List<TimeValue<double>>();
+        var data2 = new List<TimeValue<double>>();
 
         for (int i = 0; i < steps; i++)
         {
-            double z = NextGaussian();
-
-            x += 10*Math.Pow(dt, alpha / 2.0) * z; //a=10
-
-            data.Add(new TimeValue<double>(
-                now.AddSeconds(i),
-                x
-            ));
+            data1.Add(new TimeValue<double>(now.AddSeconds(i), 10 * W1[i]));
+            data2.Add(new TimeValue<double>(now.AddSeconds(i), 10 * W3[i]));
         }
 
-        brownianSeries = new ChartSeries<double>
+        var series1 = new ChartSeries<double>
         {
-            Name = "Brownian Motion",
-            Data = data.ToArray(),
+            Name = "W1",
+            Data = data1.ToArray(),
             Visible = true
         };
 
-        series = new List<ChartSeries<double>> { brownianSeries };
+        var series2 = new ChartSeries<double>
+        {
+            Name = "W3 (correlated)",
+            Data = data2.ToArray(),
+            Visible = true
+        };
+
+        series = new List<ChartSeries<double>> { series1, series2 };
 
         StateHasChanged();
     }
