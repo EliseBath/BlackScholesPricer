@@ -7,7 +7,7 @@
 
 <MudPaper Class="pa-6">
 
-<MudText Typo="Typo.h5">Brownian Motion Simulation</MudText>
+<MudText Typo="Typo.h5">Correlated Brownian Motion Simulation</MudText>
 
 <MudChart ChartType="ChartType.Timeseries"
           ChartSeries="@series"
@@ -144,7 +144,7 @@ Alpha: @alpha
 
         var series2 = new ChartSeries<double>
         {
-            Name = "W3 (correlated)",
+            Name = "W2",
             Data = data2.ToArray(),
             Visible = true
         };
