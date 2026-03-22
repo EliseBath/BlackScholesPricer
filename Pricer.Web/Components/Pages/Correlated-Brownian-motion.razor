@@ -1,0 +1,114 @@
+﻿@page "/correlated-brownian-motion"
+@using MudBlazor
+@using MudBlazor.Charts
+@using Pricer.Numerics
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-6">
+
+    <MudPaper Class="pa-6">
+
+        <MudText Typo="Typo.h5">Correlated Brownian Motion Simulation</MudText>
+
+        <MudChart ChartType="ChartType.Timeseries"
+                  ChartSeries="@series"
+                  Width="100%"
+                  Height="350px"
+                  ChartOptions="_options" />
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.subtitle1">Correlation</MudText>
+
+        <MudSlider Min="-1"
+                   Max="1"
+                   Step="0.05"
+                   Immediate="true"
+                   @bind-Value="correlation" />
+
+        <MudText Typo="Typo.body2">
+            Correlation: @correlation
+        </MudText>
+
+    </MudPaper>
+
+</MudContainer>
+
+@code {
+    private double _correlation = 0.5;
+    private double correlation
+    {
+        get => _correlation;
+        set
+        {
+            if (Math.Abs(_correlation - value) < 1e-12) return;
+            _correlation = value;
+            GeneratePath();
+        }
+    }
+
+    private ChartSeries<double> brownianSeries = new();
+    private List<ChartSeries<double>> series = new();
+
+    private readonly Random random = new();
+
+    private TimeSeriesChartOptions _options = new()
+    {
+        YAxisLines = false,
+        XAxisLines = false,
+        ShowDataMarkers = false,
+        LineStrokeWidth = 2,
+        XAxisTitle = "Time",
+        YAxisTitle = "Value"
+    };
+
+    protected override void OnInitialized()
+    {
+        GeneratePath();
+    }
+
+    private void GeneratePath(int _ = 0)
+    {
+        var now = DateTime.Now;
+
+        var steps = 100;
+        var alpha = 0.5;
+
+        var (W1, W3) = CorrelatedBrownianGenerator.Generate(steps, correlation, alpha);
+
+        var data1 = new List<TimeValue<double>>();
+        var data2 = new List<TimeValue<double>>();
+
+        for (int i = 0; i < steps; i++)
+        {
+            data1.Add(new TimeValue<double>(now.AddSeconds(i), 10 * W1[i]));
+            data2.Add(new TimeValue<double>(now.AddSeconds(i), 10 * W3[i]));
+        }
+
+        var series1 = new ChartSeries<double>
+        {
+            Name = "W1",
+            Data = data1.ToArray(),
+            Visible = true
+        };
+
+        var series2 = new ChartSeries<double>
+        {
+            Name = "W2",
+            Data = data2.ToArray(),
+            Visible = true
+        };
+
+        series = new List<ChartSeries<double>> { series1, series2 };
+
+        StateHasChanged();
+    }
+
+    private double NextGaussian()
+    {
+        double u1 = 1.0 - random.NextDouble();
+        double u2 = 1.0 - random.NextDouble();
+
+        return Math.Sqrt(-2.0 * Math.Log(u1)) *
+               Math.Cos(2.0 * Math.PI * u2);
+    }
+}
