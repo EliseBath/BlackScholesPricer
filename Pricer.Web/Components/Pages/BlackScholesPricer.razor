@@ -1,5 +1,6 @@
 ﻿@page "/blackscholespricer"
 @using MudBlazor
+@using MudBlazor.Charts
 @using Pricer.Numerics
 
 <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-6">
@@ -94,6 +95,37 @@
 
     </MudPaper>
 
+    <MudPaper Elevation="4" Class="pa-6 mt-6">
+
+        <MudText Typo="Typo.h6" GutterBottom="true">
+            Price vs Underlying
+        </MudText>
+
+        <MudText Typo="Typo.body2" Class="mb-2">
+            As T → 0 the Black–Scholes price converges towards intrinsic value.
+        </MudText>
+
+        <MudText Typo="Typo.subtitle2">Time to Maturity (T)</MudText>
+
+        <MudSlider Min="0.01"
+                   Max="2.0"
+                   Step="0.01"
+                   Immediate="true"
+                   @bind-Value="chartT" />
+
+        <MudText Typo="Typo.body2" Class="mb-4">
+            T = @chartT.ToString("F2") years
+        </MudText>
+
+        <MudChart ChartType="ChartType.Line"
+                  ChartSeries="@chartSeries"
+                  XAxisLabels="@chartLabels"
+                  Width="100%"
+                  Height="350px"
+                  ChartOptions="_chartOptions" />
+
+    </MudPaper>
+
 </MudContainer>
 @code {
 
@@ -101,8 +133,8 @@
 
     private double underlyingPrice = 100;
     private double strike = 100;
-    private double interestRate = 0.05;
-    private double volatility = 0.2;
+    private double interestRate = 0.001;
+    private double volatility = 0.5;
     private double timeToMaturity = 1.0;
 
     private double? price;
@@ -113,6 +145,38 @@
     private int maxIterations = 100;
     private double? impliedVol;
     private double? bachelierImpliedVol;
+
+    private double _chartT = 1.0;
+    private double chartT
+    {
+        get => _chartT;
+        set
+        {
+            if (Math.Abs(_chartT - value) < 1e-10) return;
+            _chartT = value;
+            BuildChart();
+        }
+    }
+
+    private ChartSeries<double> bsSeries = new();
+    private ChartSeries<double> intrinsicSeries = new();
+    private List<ChartSeries<double>> chartSeries = new();
+    private string[] chartLabels = Array.Empty<string>();
+
+    private readonly LineChartOptions _chartOptions = new()
+    {
+        YAxisLines = false,
+        XAxisLines = false,
+        ShowDataMarkers = false,
+        LineStrokeWidth = 2,
+        XAxisTitle = "Underlying price S",
+        YAxisTitle = "Option value"
+    };
+
+    protected override void OnInitialized()
+    {
+        BuildChart();
+    }
 
     private void CalculatePrice()
     {
@@ -146,5 +210,42 @@
     private void ComputeBachelierImpliedVol()
     {
         bachelierImpliedVol = ImpliedVolatilityCalculator.BachelierImpliedVolATM(marketPrice, underlyingPrice, timeToMaturity, interestRate);
+    }
+
+private void BuildChart()
+    {
+        var sValues = Enumerable.Range(60, 81).Select(i => (double)i).ToArray();
+
+        var bsData = sValues.Select(s =>
+        {
+            var bs = new BlackScholes(optionType, interestRate, _chartT, volatility, strike, s);
+            return bs.Price();
+        }).ToArray();
+
+        var intrinsicData = sValues
+             .Select(s => optionType == OptionType.Call
+                 ? Math.Max(s - strike, 0.0)
+                 : Math.Max(strike - s, 0.0))
+             .ToArray();
+
+        chartLabels = sValues.Select(s => s.ToString("F0")).ToArray();
+
+        bsSeries = new ChartSeries<double>
+        {
+            Name = "BS Call Price",
+            Data = bsData,
+            Visible = true
+        };
+
+        intrinsicSeries = new ChartSeries<double>
+        {
+            Name = "Intrinsic Value",
+            Data = intrinsicData,
+            Visible = true
+        };
+
+        chartSeries = new List<ChartSeries<double>> { bsSeries, intrinsicSeries };
+
+        StateHasChanged();
     }
 }
