@@ -50,7 +50,7 @@ public class BlackScholes
         => (Math.Log(S / K) + (r - q + 0.5 * sigma * sigma) * T) / (sigma * Math.Sqrt(T));
 
     private double d2 
-        => (Math.Log(S / K) - (r - q + 0.5 * sigma * sigma) * T) / (sigma * Math.Sqrt(T));
+        => d1 - sigma * Math.Sqrt(T);
 
 
     // Black–Scholes price
@@ -94,6 +94,57 @@ public class BlackScholes
             return 0.0;
 
         return S * Math.Exp(-q * T) * Math.Sqrt(T) * n(d1);
+    }
+
+    public double Delta()
+    {
+        if (T <= 0.0)
+        {
+            return option switch
+            {
+                OptionType.Call => S > K ? 1.0 : 0.0,
+                OptionType.Put => S < K ? -1.0 : 0.0,
+                _ => 0.0
+            };
+        }
+
+        return option switch
+        {
+            OptionType.Call => Math.Exp(-q * T) * N(d1),
+            OptionType.Put => Math.Exp(-q * T) * (N(d1) - 1.0),
+            _ => throw new ArgumentException()
+        };
+    }
+
+    public double Gamma()
+    {
+        if (T <= 0.0 || sigma <= 0.0)
+            return 0.0;
+
+        return Math.Exp(-q * T) * n(d1) / (S * sigma * Math.Sqrt(T));
+    }
+
+    public double Theta()
+    {
+        if (T <= 0.0)
+            return 0.0;
+
+        double term1 = -S * n(d1) * sigma * Math.Exp(-q * T) / (2 * Math.Sqrt(T));
+
+        return option switch
+        {
+            OptionType.Call =>
+                term1
+                - r * K * Math.Exp(-r * T) * N(d2)
+                + q * S * Math.Exp(-q * T) * N(d1),
+
+            OptionType.Put =>
+                term1
+                + r * K * Math.Exp(-r * T) * N(-d2)
+                - q * S * Math.Exp(-q * T) * N(-d1),
+
+            _ => throw new ArgumentException()
+        };
     }
 
 }

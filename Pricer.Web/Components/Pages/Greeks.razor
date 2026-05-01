@@ -1,0 +1,237 @@
+﻿@page "/greeks"
+@using MudBlazor
+@using Pricer.Numerics
+@using Plotly.Blazor
+@using Plotly.Blazor.Traces
+@using Plotly.Blazor.LayoutLib
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-6">
+
+    <MudText Typo="Typo.h4">Greeks </MudText>
+
+    <MudSelect T="string"
+               Label="Strategy"
+               @bind-Value="strategy"
+               @bind-Value:after="Build">
+        <MudSelectItem Value=@("call")>Call</MudSelectItem>
+        <MudSelectItem Value=@("put")>Put</MudSelectItem>
+        <MudSelectItem Value=@("spread")>Call Spread</MudSelectItem>
+        <MudSelectItem Value=@("straddle")>Straddle</MudSelectItem>
+        <MudSelectItem Value=@("butterfly")>Butterfly</MudSelectItem>
+    </MudSelect>
+
+    <MudDivider Class="my-4" />
+
+    <!-- TIME -->
+    <MudText>Time (T)</MudText>
+    <MudSlider Min="0.01" Max="1" Step="0.01"
+               Immediate="true"
+               @bind-Value="T"
+               @bind-Value:after="BuildAsync" />
+
+    <MudText>T = @T.ToString("F2")</MudText>
+
+    <MudDivider Class="my-4" />
+
+    <!-- VOL -->
+    <MudText>Volatility (σ)</MudText>
+    <MudSlider Min="0.05" Max="1" Step="0.01"
+               Immediate="true"
+               @bind-Value="sigma"
+               @bind-Value:after="BuildAsync" />
+
+    <MudText>σ = @sigma.ToString("F2")</MudText>
+
+    <MudGrid Class="mt-4">
+
+        <!-- Row 1: Price (8 cols) + Delta (4 cols) -->
+        <MudItem xs="12" md="8">
+            <MudText Typo="Typo.h6">Price</MudText>
+            <PlotlyChart @ref="priceChart" Data="@priceData" Layout="@priceLayout" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudText Typo="Typo.h6">Delta</MudText>
+            <PlotlyChart @ref="deltaChart" Data="@deltaData" Layout="@deltaLayout" />
+        </MudItem>
+
+        <!-- Row 2: Gamma + Theta + Vega (4 cols each) -->
+        <MudItem xs="12" md="4">
+            <MudText Typo="Typo.h6">Gamma</MudText>
+            <PlotlyChart @ref="gammaChart" Data="@gammaData" Layout="@gammaLayout" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudText Typo="Typo.h6">Theta</MudText>
+            <PlotlyChart @ref="thetaChart" Data="@thetaData" Layout="@thetaLayout" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudText Typo="Typo.h6">Vega</MudText>
+            <PlotlyChart @ref="vegaChart" Data="@vegaData" Layout="@vegaLayout" />
+        </MudItem>
+
+    </MudGrid>
+
+</MudContainer>
+
+@code {
+
+    private string strategy = "call";
+    private double T = 1.0;
+    private double sigma = 0.2;
+
+    private double[] Sgrid = Enumerable.Range(60, 81).Select(x => (double)x).ToArray();
+
+    private IList<ITrace> priceData = new List<ITrace>();
+    private IList<ITrace> deltaData = new List<ITrace>();
+    private IList<ITrace> gammaData = new List<ITrace>();
+    private IList<ITrace> thetaData = new List<ITrace>();
+    private IList<ITrace> vegaData = new List<ITrace>();
+
+    private Layout priceLayout = new();
+    private Layout deltaLayout = new();
+    private Layout gammaLayout = new();
+    private Layout thetaLayout = new();
+    private Layout vegaLayout = new();
+
+    private PlotlyChart priceChart = default!;
+    private PlotlyChart deltaChart = default!;
+    private PlotlyChart gammaChart = default!;
+    private PlotlyChart thetaChart = default!;
+    private PlotlyChart vegaChart = default!;
+
+    protected override void OnInitialized()
+    {
+        Build();
+    }
+
+    private async Task BuildAsync()
+    {
+        Build();
+        await Task.WhenAll(
+            priceChart.React(),
+            deltaChart.React(),
+            gammaChart.React(),
+            thetaChart.React(),
+            vegaChart.React()
+        );
+    }
+
+    private void Build()
+    {
+        double K = 100;
+        double r = 0.05;
+
+        var price = new List<double>();
+        var intrinsic = new List<double>();
+        var delta = new List<double>();
+        var gamma = new List<double>();
+        var theta = new List<double>();
+        var vega = new List<double>();
+
+        foreach (var S in Sgrid)
+        {
+            var result = ComputeStrategy(S);
+
+            price.Add(result.Item1);
+
+            intrinsic.Add(strategy switch
+            {
+                "call" => Math.Max(S - K, 0.0),
+                "put" => Math.Max(K - S, 0.0),
+                _ => 0.0
+            });
+
+            delta.Add(result.Item2);
+            gamma.Add(result.Item3);
+            theta.Add(result.Item4);
+            vega.Add(result.Item5);
+        }
+
+        // PRICE (2 lijnen!)
+        priceData = new List<ITrace>
+        {
+            new Scatter { X = Sgrid.Select(s => (object)s).ToList(), Y = price.Select(v => (object)v).ToList(), Mode = Plotly.Blazor.Traces.ScatterLib.ModeFlag.Lines, Name = "Black-Scholes" },
+            new Scatter { X = Sgrid.Select(s => (object)s).ToList(), Y = intrinsic.Select(v => (object)v).ToList(), Mode = Plotly.Blazor.Traces.ScatterLib.ModeFlag.Lines, Name = "Intrinsic" }
+        };
+
+        priceLayout = new Layout { Title = new Title { Text = "Price vs Underlying" } };
+
+        // DELTA
+        deltaData = new List<ITrace>
+        {
+            new Scatter { X = Sgrid.Select(s => (object)s).ToList(), Y = delta.Select(v => (object)v).ToList(), Mode = Plotly.Blazor.Traces.ScatterLib.ModeFlag.Lines, Name = "Delta" }
+        };
+
+        deltaLayout = new Layout();
+
+        // GAMMA (🔥 opgelost!)
+        gammaData = new List<ITrace>
+        {
+            new Scatter { X = Sgrid.Select(s => (object)s).ToList(), Y = gamma.Select(v => (object)v).ToList(), Mode = Plotly.Blazor.Traces.ScatterLib.ModeFlag.Lines, Name = "Gamma" }
+        };
+
+        gammaLayout = new Layout();
+
+        // THETA
+        thetaData = new List<ITrace>
+        {
+            new Scatter { X = Sgrid.Select(s => (object)s).ToList(), Y = theta.Select(v => (object)v).ToList(), Mode = Plotly.Blazor.Traces.ScatterLib.ModeFlag.Lines, Name = "Theta" }
+        };
+
+        thetaLayout = new Layout();
+
+        // VEGA
+        vegaData = new List<ITrace>
+        {
+            new Scatter { X = Sgrid.Select(s => (object)s).ToList(), Y = vega.Select(v => (object)v).ToList(), Mode = Plotly.Blazor.Traces.ScatterLib.ModeFlag.Lines, Name = "Vega" }
+        };
+
+        vegaLayout = new Layout();
+
+        StateHasChanged();
+    }
+
+    private (double, double, double, double, double) ComputeStrategy(double S)
+    {
+        double K = 100;
+        double r = 0.05;
+
+        var call = new BlackScholes(OptionType.Call, r, T, sigma, K, S);
+        var put = new BlackScholes(OptionType.Put, r, T, sigma, K, S);
+
+        switch (strategy)
+        {
+            case "call":
+                return (call.Price(), call.Delta(), call.Gamma(), call.Theta(), call.Vega());
+
+            case "put":
+                return (put.Price(), put.Delta(), put.Gamma(), put.Theta(), put.Vega());
+
+            case "spread":
+                var callKp = new BlackScholes(OptionType.Call, r, T, sigma, K + 10, S);
+                return (call.Price() - callKp.Price(),
+                        call.Delta() - callKp.Delta(),
+                        call.Gamma() - callKp.Gamma(),
+                        call.Theta() - callKp.Theta(),
+                        call.Vega() - callKp.Vega());
+
+            case "straddle":
+                return (call.Price() + put.Price(),
+                        call.Delta() + put.Delta(),
+                        call.Gamma() + put.Gamma(),
+                        call.Theta() + put.Theta(),
+                        call.Vega() + put.Vega());
+
+            case "butterfly":
+                var callKm = new BlackScholes(OptionType.Call, r, T, sigma, K - 10, S);
+                var callKp2 = new BlackScholes(OptionType.Call, r, T, sigma, K + 10, S);
+                return (callKm.Price() - 2 * call.Price() + callKp2.Price(),
+                        callKm.Delta() - 2 * call.Delta() + callKp2.Delta(),
+                        callKm.Gamma() - 2 * call.Gamma() + callKp2.Gamma(),
+                        callKm.Theta() - 2 * call.Theta() + callKp2.Theta(),
+                        callKm.Vega() - 2 * call.Vega() + callKp2.Vega());
+
+            default:
+                return (0, 0, 0, 0, 0);
+        }
+    }
+}
