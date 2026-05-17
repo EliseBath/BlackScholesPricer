@@ -1,0 +1,182 @@
+﻿@page "/binomial"
+
+@using MudBlazor
+@using Plotly.Blazor
+@using Plotly.Blazor.Traces
+@using Plotly.Blazor.LayoutLib
+@using Pricer.Numerics
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-6">
+
+    <MudText Typo="Typo.h4">
+        Binomial Tree vs Black-Scholes
+    </MudText>
+
+    <MudDivider Class="my-4" />
+
+    <!-- STEPS -->
+    <MudText>Number of Steps (n)</MudText>
+
+    <MudSlider Min="1"
+               Max="500"
+               Step="1"
+               Immediate="true"
+               @bind-Value="n"
+               @bind-Value:after="BuildAsync" />
+
+    <MudText>
+        n = @n
+    </MudText>
+
+    <MudDivider Class="my-4" />
+
+    <!-- VOL -->
+    <MudText>Volatility (σ)</MudText>
+
+    <MudSlider Min="0.05"
+               Max="1.0"
+               Step="0.01"
+               Immediate="true"
+               @bind-Value="sigma"
+               @bind-Value:after="BuildAsync" />
+
+    <MudText>
+        σ = @sigma.ToString("F2")
+    </MudText>
+
+    <MudDivider Class="my-4" />
+
+    <!-- TIME -->
+    <MudText>Time to Maturity (T)</MudText>
+
+    <MudSlider Min="0.1"
+               Max="5"
+               Step="0.1"
+               Immediate="true"
+               @bind-Value="T"
+               @bind-Value:after="BuildAsync" />
+
+    <MudText>
+        T = @T.ToString("F2")
+    </MudText>
+
+    <MudDivider Class="my-4" />
+
+    <!-- PLOT -->
+    <MudText Typo="Typo.h6">
+        Convergence Plot
+    </MudText>
+
+    <PlotlyChart @ref="chart"
+                 Data="@chartData"
+                 Layout="@chartLayout" />
+
+</MudContainer>
+
+@code {
+
+    private int n = 50;
+
+    private double sigma = 0.2;
+    private double T = 1.0;
+
+    private double S = 100.0;
+    private double K = 100.0;
+    private double r = 0.05;
+
+    private PlotlyChart chart = default!;
+
+    private IList<ITrace> chartData = new List<ITrace>();
+
+    private Layout chartLayout = new();
+
+    protected override void OnInitialized()
+    {
+        Build();
+    }
+
+    private async Task BuildAsync()
+    {
+        Build();
+
+        await chart.React();
+    }
+
+    private double[] Sgrid =
+     Enumerable.Range(90, 21)
+               .Select(x => (double)x)
+               .ToArray();
+
+    private void Build()
+    {
+        var bsPrices = new List<double>();
+
+        var treePrices = new List<double>();
+
+        foreach (var underlying in Sgrid)
+        {
+            // BLACK-SCHOLES
+            var bs = new BlackScholes(
+                OptionType.Call,
+                r,
+                T,
+                sigma,
+                K,
+                underlying);
+
+            double bsValue = bs.Price();
+
+            // BINOMIAL TREE
+            var tree = new BinomialTreePricer(
+                OptionType.Call,
+                r,
+                T,
+                sigma,
+                K,
+                underlying,
+                n);
+
+            double treeValue = tree.Price();
+
+            bsPrices.Add(bsValue);
+
+            treePrices.Add(treeValue);
+        }
+
+        // PLOT
+        chartData = new List<ITrace>
+    {
+        new Scatter
+        {
+            X = Sgrid.Select(x => (object)x).ToList(),
+
+            Y = bsPrices.Select(x => (object)x).ToList(),
+
+            Mode = Plotly.Blazor.Traces.ScatterLib.ModeFlag.Lines,
+
+            Name = "Black-Scholes"
+        },
+
+        new Scatter
+        {
+            X = Sgrid.Select(x => (object)x).ToList(),
+
+            Y = treePrices.Select(x => (object)x).ToList(),
+
+            Mode = Plotly.Blazor.Traces.ScatterLib.ModeFlag.Lines,
+
+            Name = $"Binomial Tree (n = {n})"
+        }
+    };
+
+        chartLayout = new Layout
+        {
+            Title = new Title
+            {
+                Text = "Binomial Tree vs Black-Scholes"
+            }
+        };
+
+        StateHasChanged();
+    }
+}
